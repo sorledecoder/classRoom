@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Voice & Video Recorder</title>
+<link rel="manifest" href="manifest.json">
+<!-- Favicon / browser tab icon (your OIP.ico) --> 
+  <link rel="icon" href="Class-logo.ico" type="image/x-icon" /> 
+  <link rel="shortcut icon" href="Class-logo.ico" type="image/x-icon" /> 
+ 
+  <!-- PWA: manifest + theme color --> 
+  <link rel="manifest" href="manifest.json" /> 
+  <meta name="theme-color" content="#111827" /> 
+<style>
+  :root{
+    --bg:#f8fafc; --card:#ffffff; --text:#0f172a; --muted:#64748b;
+    --accent:#ef4444; --accent2:#2563eb; --border:#e2e8f0;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0f172a; --card:#1e293b; --text:#f1f5f9; --muted:#94a3b8;
+      --border:#334155;
+    }
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; font-family:-apple-system,Segoe UI,Roboto,sans-serif;
+    background:var(--bg); color:var(--text);
+    padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+  }
+  .wrap{max-width:560px;margin:0 auto;padding:20px}
+  h1{font-size:1.3rem;margin:0 0 4px}
+  p.sub{color:var(--muted);font-size:.85rem;margin:0 0 18px}
+  .tabs{display:flex;gap:6px;margin-bottom:16px}
+  .tab{flex:1;padding:10px;text-align:center;border-radius:10px;cursor:pointer;
+       background:var(--card);border:1px solid var(--border);font-size:.85rem}
+  .tab.active{background:var(--accent2);color:#fff;border-color:var(--accent2)}
+  .panel{display:none}
+  .panel.active{display:block}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:14px}
+  .card h2{font-size:1rem;margin:0 0 10px}
+  .row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+  button{
+    border:none;border-radius:10px;padding:10px 14px;font-size:.85rem;cursor:pointer;
+    background:var(--accent2);color:#fff;
+  }
+  button.danger{background:var(--accent)}
+  button.ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  .status{font-size:.8rem;color:var(--muted);margin-bottom:8px}
+  .ctrl-row{display:flex;align-items:center;gap:8px;margin:6px 0;font-size:.85rem}
+  .ctrl-row label{width:60px;color:var(--muted)}
+  select,input[type=range]{flex:1}
+  .rec-list{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+  .rec-item{border:1px solid var(--border);border-radius:10px;padding:10px}
+  .rec-item audio,.rec-item video{width:100%;margin-bottom:6px}
+  .note{font-size:.78rem;color:var(--muted);line-height:1.4}
+  .install-btn{display:none;width:100%;margin-bottom:14px}
+  video.live{width:100%;border-radius:10px;background:#000;margin-bottom:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Voice & Video Recorder</h1>
+  <p class="sub">Works offline once installed. Audio/webcam recording needs the browser's permission each session.</p>
+
+  <button id="installBtn" class="install-btn">📲 Install this app</button>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="voice">Voice</div>
+    <div class="tab" data-tab="webcam">Webcam</div>
+    <div class="tab" data-tab="screen">Screen & Mouse</div>
+  </div>
+
+  <!-- VOICE -->
+  <div class="panel active" id="panel-voice">
+    <div class="card">
+      <h2>Record</h2>
+      <div class="status" id="voiceStatus">Idle</div>
+      <div class="row">
+        <button id="vRecord">● Record</button>
+        <button id="vPause" disabled>Pause</button>
+        <button id="vResume" disabled>Resume</button>
+        <button id="vStop" class="danger" disabled>Stop & Save</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Your Recordings</h2>
+      <div class="rec-list" id="voiceList"></div>
+    </div>
+  </div>
+
+  <!-- WEBCAM -->
+  <div class="panel" id="panel-webcam">
+    <div class="card">
+      <h2>Webcam</h2>
+      <video id="webcamLive" class="live" autoplay muted playsinline></video>
+      <div class="status" id="webcamStatus">Idle</div>
+      <div class="row">
+        <button id="wStart">Start Camera</button>
+        <button id="wRecord" disabled>● Record</button>
+        <button id="wPause" disabled>Pause</button>
+        <button id="wResume" disabled>Resume</button>
+        <button id="wStop" class="danger" disabled>Stop & Save</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Your Recordings</h2>
+      <div class="rec-list" id="webcamList"></div>
+    </div>
+  </div>
+
+  <!-- SCREEN / MOUSE / TUTORIAL -->
+  <div class="panel" id="panel-screen">
+    <div class="card">
+      <h2>Screen Recording (shows mouse movement)</h2>
+      <p class="note">A web page can't track your mouse outside its own window —
+      that's true even if you pick "Entire screen"; browsers never give pages
+      raw system cursor coordinates. The cursor is still visible <em>in the video
+      itself</em> though, so movement/clicks show up in playback.</p>
+
+      <div class="ctrl-row">
+        <label style="width:auto;margin-right:8px">
+          <input type="checkbox" id="tutorialMode"> Tutorial mode (webcam overlay + voice)
+        </label>
+      </div>
+      <div class="ctrl-row" id="webcamPosRow" style="display:none">
+        <label>Webcam</label>
+        <select id="webcamPos">
+          <option value="bottom-left" selected>Bottom-left</option>
+          <option value="bottom-right">Bottom-right</option>
+          <option value="top-left">Top-left</option>
+          <option value="top-right">Top-right</option>
+        </select>
+      </div>
+      <p class="note" id="audioNote">
+        Your microphone is captured whenever Tutorial mode is on, or whenever you
+        share "Entire screen". Sound already playing on your screen (e.g. a video)
+        is captured too if your browser's share dialog offers a "Share audio"
+        checkbox — tick it there; this is a browser-level option, not something
+        this app can turn on for you. Chrome/Edge on Windows support this for
+        Entire Screen, a Window, and a Chrome/Edge Tab.
+      </p>
+
+      <!-- off-screen source used only to draw frames onto the canvas below -->
+      <video id="tutorialPreview" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none" muted playsinline></video>
+      <canvas id="tutorialCanvas" class="live" style="display:none"></canvas>
+
+      <div class="status" id="screenStatus">Idle</div>
+      <div class="status" id="screenTimer" style="display:none;font-weight:600"></div>
+      <div class="row">
+        <button id="sRecord">● Start Screen Recording</button>
+        <button id="sPause" disabled>Pause</button>
+        <button id="sResume" disabled>Resume</button>
+        <button id="sStop" class="danger" disabled>Stop & Save</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Your Recordings</h2>
+      <div class="rec-list" id="screenList"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---------- tabs ----------
+document.querySelectorAll(".tab").forEach(t=>{
+  t.onclick = () => {
+    document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+    document.querySelectorAll(".panel").forEach(x=>x.classList.remove("active"));
+    t.classList.add("active");
+    document.getElementById("panel-"+t.dataset.tab).classList.add("active");
+  };
+});
+
+// ---------- install prompt ----------
+let deferredPrompt;
+window.addEventListener("beforeinstallprompt",(e)=>{
+  e.preventDefault(); deferredPrompt = e;
+  document.getElementById("installBtn").style.display="block";
+});
+document.getElementById("installBtn").onclick = async ()=>{
+  if(!deferredPrompt) return;
+  deferredPrompt.prompt();
+  await deferredPrompt.userChoice;
+  deferredPrompt = null;
+  document.getElementById("installBtn").style.display="none";
+};
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js").catch(console.error);
+}
+
+// ---------- persistence (IndexedDB) ----------
+const DB_NAME = "recorderDB", STORE = "recordings";
+
+function openDB(){
+  return new Promise((resolve, reject)=>{
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = ()=>{
+      const db = req.result;
+      if (!db.objectStoreNames.contains(STORE)){
+        db.createObjectStore(STORE, {keyPath:"id", autoIncrement:true});
+      }
+    };
+    req.onsuccess = ()=> resolve(req.result);
+    req.onerror = ()=> reject(req.error);
+  });
+}
+async function saveRecording(kind, blob, ts){
+  const db = await openDB();
+  return new Promise((resolve, reject)=>{
+    const tx = db.transaction(STORE, "readwrite");
+    const req = tx.objectStore(STORE).add({kind, blob, ts});
+    req.onsuccess = ()=> resolve(req.result);
+    req.onerror = ()=> reject(req.error);
+  });
+}
+async function deleteRecording(id){
+  const db = await openDB();
+  return new Promise((resolve, reject)=>{
+    const tx = db.transaction(STORE, "readwrite");
+    tx.objectStore(STORE).delete(id);
+    tx.oncomplete = ()=> resolve();
+    tx.onerror = ()=> reject(tx.error);
+  });
+}
+async function loadAllRecordings(){
+  const db = await openDB();
+  return new Promise((resolve, reject)=>{
+    const tx = db.transaction(STORE, "readonly");
+    const req = tx.objectStore(STORE).getAll();
+    req.onsuccess = ()=> resolve(req.result);
+    req.onerror = ()=> reject(req.error);
+  });
+}
+
+// ---------- helpers ----------
+// existingId/existingTs are set when re-rendering a recording that was
+// already saved in a previous session; omit them for a brand-new one
+// (it gets saved to IndexedDB here so it's still there next time you open the app).
+async function addRecordingCard(listEl, blob, kind, dbKind, existingId, existingTs){
+  const ts = existingTs || Date.now();
+  const id = existingId !== undefined ? existingId : await saveRecording(dbKind, blob, ts);
+
+  const url = URL.createObjectURL(blob);
+  const item = document.createElement("div");
+  item.className = "rec-item";
+
+  const mediaTag = kind === "audio" ? "audio" : "video";
+  const media = document.createElement(mediaTag);
+  media.src = url; media.controls = true;
+  item.appendChild(media);
+
+  if (kind === "audio"){
+    const speedRow = document.createElement("div");
+    speedRow.className = "ctrl-row";
+    speedRow.innerHTML = `<label>Speed</label>
+      <select>
+        <option value="0.5">Slow</option>
+        <option value="1" selected>Normal</option>
+        <option value="1.75">Fast</option>
+      </select>`;
+    speedRow.querySelector("select").onchange = (e)=>{ media.playbackRate = parseFloat(e.target.value); };
+    item.appendChild(speedRow);
+
+    const volRow = document.createElement("div");
+    volRow.className = "ctrl-row";
+    volRow.innerHTML = `<label>Volume</label><input type="range" min="0" max="1" step="0.01" value="1">`;
+    volRow.querySelector("input").oninput = (e)=>{ media.volume = parseFloat(e.target.value); };
+    item.appendChild(volRow);
+
+    const btnRow = document.createElement("div");
+    btnRow.className = "row";
+    const previewBtn = document.createElement("button");
+    previewBtn.className = "ghost"; previewBtn.textContent = "Preview 5s";
+    previewBtn.onclick = ()=>{ media.currentTime = 0; media.play();
+      setTimeout(()=>media.pause(), 5000); };
+    btnRow.appendChild(previewBtn);
+    item.appendChild(btnRow);
+  }
+
+  const btns = document.createElement("div");
+  btns.className = "row";
+  btns.style.marginTop = "6px";
+
+  const dl = document.createElement("a");
+  dl.href = url; dl.download = `${dbKind}_${ts}.webm`;
+  dl.textContent = "⬇ Download"; dl.style.fontSize = ".8rem"; dl.style.alignSelf = "center";
+  btns.appendChild(dl);
+
+  const delBtn = document.createElement("button");
+  delBtn.className = "ghost"; delBtn.textContent = "🗑 Delete";
+  delBtn.onclick = async ()=>{
+    await deleteRecording(id);
+    item.remove();
+  };
+  btns.appendChild(delBtn);
+  item.appendChild(btns);
+
+  const label = document.createElement("div");
+  label.className = "note"; label.textContent = new Date(ts).toLocaleString();
+  item.appendChild(label);
+
+  listEl.prepend(item);
+}
+
+// Load everything saved in a previous session as soon as the app opens.
+async function loadPreviousRecordings(){
+  try{
+    const recs = await loadAllRecordings();
+    recs.sort((a,b)=> a.ts - b.ts); // oldest first; prepend puts newest on top
+    for (const r of recs){
+      const listEl = r.kind === "voice" ? vList : r.kind === "webcam" ? wList : sList;
+      const mediaKind = r.kind === "voice" ? "audio" : "video";
+      await addRecordingCard(listEl, r.blob, mediaKind, r.kind, r.id, r.ts);
+    }
+  }catch(e){
+    console.error("Could not load previous recordings", e);
+  }
+}
+
+// ---------- VOICE ----------
+let vRecorder, vChunks = [], vStream;
+const vRecordBtn=document.getElementById("vRecord"), vPauseBtn=document.getElementById("vPause"),
+      vResumeBtn=document.getElementById("vResume"), vStopBtn=document.getElementById("vStop"),
+      vStatus=document.getElementById("voiceStatus"), vList=document.getElementById("voiceList");
+
+vRecordBtn.onclick = async ()=>{
+  vStream = await navigator.mediaDevices.getUserMedia({audio:true});
+  vChunks = [];
+  vRecorder = new MediaRecorder(vStream);
+  vRecorder.ondataavailable = e=>{ if(e.data.size) vChunks.push(e.data); };
+  vRecorder.onstop = ()=>{
+    const blob = new Blob(vChunks, {type:"audio/webm"});
+    addRecordingCard(vList, blob, "audio", "voice");
+    vStream.getTracks().forEach(t=>t.stop());
+    vStatus.textContent = "Saved";
+  };
+  vRecorder.start();
+  vStatus.textContent = "Recording...";
+  vRecordBtn.disabled=true; vPauseBtn.disabled=false; vStopBtn.disabled=false;
+};
+vPauseBtn.onclick = ()=>{ vRecorder.pause(); vStatus.textContent="Paused";
+  vPauseBtn.disabled=true; vResumeBtn.disabled=false; };
+vResumeBtn.onclick = ()=>{ vRecorder.resume(); vStatus.textContent="Recording...";
+  vPauseBtn.disabled=false; vResumeBtn.disabled=true; };
+vStopBtn.onclick = ()=>{ vRecorder.stop();
+  vRecordBtn.disabled=false; vPauseBtn.disabled=true; vResumeBtn.disabled=true; vStopBtn.disabled=true; };
+
+// ---------- WEBCAM ----------
+let wStream, wRecorder, wChunks=[];
+const wStartBtn=document.getElementById("wStart"), wRecordBtn=document.getElementById("wRecord"),
+      wPauseBtn=document.getElementById("wPause"), wResumeBtn=document.getElementById("wResume"),
+      wStopBtn=document.getElementById("wStop"), wStatus=document.getElementById("webcamStatus"),
+      wList=document.getElementById("webcamList"), wLive=document.getElementById("webcamLive");
+
+wStartBtn.onclick = async ()=>{
+  wStream = await navigator.mediaDevices.getUserMedia({video:true, audio:true});
+  wLive.srcObject = wStream;
+  wStatus.textContent = "Camera on";
+  wStartBtn.disabled=true; wRecordBtn.disabled=false;
+};
+wRecordBtn.onclick = ()=>{
+  wChunks=[];
+  wRecorder = new MediaRecorder(wStream);
+  wRecorder.ondataavailable = e=>{ if(e.data.size) wChunks.push(e.data); };
+  wRecorder.onstop = ()=>{
+    const blob = new Blob(wChunks, {type:"video/webm"});
+    addRecordingCard(wList, blob, "video", "webcam");
+    wStatus.textContent = "Saved";
+  };
+  wRecorder.start();
+  wStatus.textContent = "Recording...";
+  wRecordBtn.disabled=true; wPauseBtn.disabled=false; wStopBtn.disabled=false;
+};
+wPauseBtn.onclick = ()=>{
+  wRecorder.pause(); wStatus.textContent="Paused";
+  wPauseBtn.disabled=true; wResumeBtn.disabled=false;
+};
+wResumeBtn.onclick = ()=>{
+  wRecorder.resume(); wStatus.textContent="Recording...";
+  wPauseBtn.disabled=false; wResumeBtn.disabled=true;
+};
+wStopBtn.onclick = ()=>{
+  wRecorder.stop();
+  wStopBtn.disabled=true; wRecordBtn.disabled=false; wPauseBtn.disabled=true; wResumeBtn.disabled=true;
+};
+
+// ---------- SCREEN / MOUSE ----------
+let sStream, sMicStream, sWebcamStream, sCombined, sRecorder, sChunks=[];
+let sAnimId=null, sAudioCtx=null, sTimerInterval=null, sStartTime=null, sWebcamVideoEl=null;
+const sRecordBtn=document.getElementById("sRecord"), sPauseBtn=document.getElementById("sPause"),
+      sResumeBtn=document.getElementById("sResume"), sStopBtn=document.getElementById("sStop"),
+      sStatus=document.getElementById("screenStatus"), sList=document.getElementById("screenList"),
+      sTimerEl=document.getElementById("screenTimer"),
+      tutorialModeChk=document.getElementById("tutorialMode"),
+      webcamPosRow=document.getElementById("webcamPosRow"),
+      webcamPosSel=document.getElementById("webcamPos"),
+      tutorialPreview=document.getElementById("tutorialPreview"),
+      tutorialCanvas=document.getElementById("tutorialCanvas");
+
+tutorialModeChk.onchange = ()=>{ webcamPosRow.style.display = tutorialModeChk.checked ? "flex" : "none"; };
+
+function startTimer(){
+  sStartTime = Date.now();
+  sTimerEl.style.display = "block";
+  sTimerInterval = setInterval(()=>{
+    const secs = Math.floor((Date.now()-sStartTime)/1000);
+    sTimerEl.textContent = `⏺ ${String(Math.floor(secs/60)).padStart(2,"0")}:${String(secs%60).padStart(2,"0")}`;
+  }, 500);
+}
+function stopTimer(){ clearInterval(sTimerInterval); sTimerEl.style.display = "none"; }
+
+async function countdown(seconds){
+  for(let i=seconds;i>0;i--){ sStatus.textContent = `Starting in ${i}...`; await new Promise(r=>setTimeout(r,1000)); }
+}
+
+function drawWebcamOverlay(ctx, canvasW, canvasH, video, position){
+  const size = Math.round(Math.min(canvasW,canvasH)*0.22);
+  const margin = Math.round(size*0.15);
+  const x = position.includes("left") ? margin : canvasW-size-margin;
+  const y = position.includes("bottom") ? canvasH-size-margin : margin;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(x+size/2, y+size/2, size/2, 0, Math.PI*2);
+  ctx.closePath();
+  ctx.clip();
+  const vw = video.videoWidth || size, vh = video.videoHeight || size;
+  const scale = Math.max(size/vw, size/vh);
+  const dw = vw*scale, dh = vh*scale;
+  ctx.drawImage(video, x+size/2-dw/2, y+size/2-dh/2, dw, dh);
+  ctx.restore();
+  ctx.beginPath();
+  ctx.arc(x+size/2, y+size/2, size/2, 0, Math.PI*2);
+  ctx.lineWidth = 3; ctx.strokeStyle = "#ffffff"; ctx.stroke();
+}
+
+function cleanupScreenRecording(){
+  if (sAnimId) cancelAnimationFrame(sAnimId);
+  sAnimId = null;
+  if (sAudioCtx){ sAudioCtx.close(); sAudioCtx = null; }
+  if (sStream) sStream.getTracks().forEach(t=>t.stop());
+  if (sMicStream) sMicStream.getTracks().forEach(t=>t.stop());
+  if (sWebcamStream) sWebcamStream.getTracks().forEach(t=>t.stop());
+  tutorialPreview.srcObject = null;
+  tutorialCanvas.style.display = "none";
+  tutorialModeChk.disabled = false;
+}
+
+sRecordBtn.onclick = async ()=>{
+  const tutorial = tutorialModeChk.checked;
+
+  sStream = await navigator.mediaDevices.getDisplayMedia({video:{cursor:"always"}, audio:true});
+  const settings = sStream.getVideoTracks()[0].getSettings();
+  const isEntireScreen = settings.displaySurface === "monitor";
+  const needsPlainMic = !tutorial && isEntireScreen; // same rule as before for non-tutorial mode
+
+  sMicStream = null; sWebcamStream = null;
+  if (tutorial){
+    try{
+      sWebcamStream = await navigator.mediaDevices.getUserMedia({video:true, audio:true});
+    }catch(err){
+      alert("Couldn't access your webcam/microphone, so this will record screen only.");
+    }
+  } else if (needsPlainMic){
+    try{ sMicStream = await navigator.mediaDevices.getUserMedia({audio:true}); }
+    catch(err){ sMicStream = null; }
+  }
+
+  // ---- video track: plain screen, or composited screen + webcam PiP ----
+  let videoTrack;
+  if (tutorial && sWebcamStream){
+    tutorialPreview.srcObject = sStream;
+    await tutorialPreview.play();
+    sWebcamVideoEl = document.createElement("video");
+    sWebcamVideoEl.srcObject = sWebcamStream;
+    sWebcamVideoEl.muted = true;
+    await sWebcamVideoEl.play();
+
+    tutorialCanvas.width = tutorialPreview.videoWidth || 1280;
+    tutorialCanvas.height = tutorialPreview.videoHeight || 720;
+    tutorialCanvas.style.display = "block";
+    const ctx = tutorialCanvas.getContext("2d");
+    const draw = ()=>{
+      ctx.drawImage(tutorialPreview, 0, 0, tutorialCanvas.width, tutorialCanvas.height);
+      drawWebcamOverlay(ctx, tutorialCanvas.width, tutorialCanvas.height, sWebcamVideoEl, webcamPosSel.value);
+      sAnimId = requestAnimationFrame(draw);
+    };
+    draw();
+    videoTrack = tutorialCanvas.captureStream(30).getVideoTracks()[0];
+  } else {
+    videoTrack = sStream.getVideoTracks()[0];
+  }
+
+  // ---- audio track(s): mix whichever sources are actually present ----
+  const audioSources = [];
+  if (sStream.getAudioTracks().length) audioSources.push(sStream);           // sound playing on screen
+  if (tutorial && sWebcamStream && sWebcamStream.getAudioTracks().length) audioSources.push(sWebcamStream); // narration
+  if (!tutorial && sMicStream) audioSources.push(sMicStream);                // narration (non-tutorial, entire screen)
+
+  let finalAudioTrack = null;
+  if (audioSources.length === 1){
+    finalAudioTrack = audioSources[0].getAudioTracks()[0];
+  } else if (audioSources.length > 1){
+    sAudioCtx = new AudioContext();
+    const dest = sAudioCtx.createMediaStreamDestination();
+    audioSources.forEach(s=> sAudioCtx.createMediaStreamSource(s).connect(dest));
+    finalAudioTrack = dest.stream.getAudioTracks()[0];
+  }
+
+  const finalTracks = [videoTrack];
+  if (finalAudioTrack) finalTracks.push(finalAudioTrack);
+  sCombined = new MediaStream(finalTracks);
+
+  sChunks=[];
+  sRecorder = new MediaRecorder(sCombined);
+  sRecorder.ondataavailable = e=>{ if(e.data.size) sChunks.push(e.data); };
+  sRecorder.onstop = ()=>{
+    const blob = new Blob(sChunks, {type:"video/webm"});
+    addRecordingCard(sList, blob, "video", tutorial ? "tutorial" : "screen_mouse");
+    cleanupScreenRecording();
+    stopTimer();
+    sStatus.textContent = "Saved";
+  };
+  sStream.getVideoTracks()[0].onended = ()=>{ if(sRecorder.state!=="inactive") sRecorder.stop(); };
+
+  tutorialModeChk.disabled = true;
+  await countdown(3);
+  sRecorder.start();
+  startTimer();
+  sStatus.textContent = tutorial
+    ? "Recording tutorial... (webcam + voice + screen)"
+    : (needsPlainMic ? "Recording... (narrate away, your mic is being captured)" : "Recording...");
+  sRecordBtn.disabled=true; sPauseBtn.disabled=false; sStopBtn.disabled=false;
+};
+sPauseBtn.onclick = ()=>{
+  sRecorder.pause(); sStatus.textContent="Paused";
+  sPauseBtn.disabled=true; sResumeBtn.disabled=false;
+};
+sResumeBtn.onclick = ()=>{
+  sRecorder.resume(); sStatus.textContent="Recording...";
+  sPauseBtn.disabled=false; sResumeBtn.disabled=true;
+};
+sStopBtn.onclick = ()=>{
+  sRecorder.stop();
+  sStopBtn.disabled=true; sRecordBtn.disabled=false; sPauseBtn.disabled=true; sResumeBtn.disabled=true;
+};
+
+// Show everything saved in previous sessions as soon as the app opens.
+loadPreviousRecordings();
+</script>
+</body>
+</html>
